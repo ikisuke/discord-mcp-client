@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  discord-gateway:
+    build:
+      context: ./services/discord-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    env_file: .env
+    depends_on:
+      - command-handler
+    restart: unless-stopped
+    volumes:
+      - ./.auth:/app/.auth
+
+  command-handler:
+    build:
+      context: ./services/command-handler
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    env_file: .env
+    depends_on:
+      - mcp-client
+      - tools-service
+    restart: unless-stopped
+
+  mcp-client:
+    build:
+      context: ./services/mcp-client
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    env_file: .env
+    depends_on:
+      - auth-service
+    restart: unless-stopped
+    volumes:
+      - ./.auth:/app/.auth
+
+  tools-service:
+    build:
+      context: ./services/tools-service
+      dockerfile: Dockerfile
+    ports:
+      - "3003:3003"
+    env_file: .env
+    depends_on:
+      - mcp-client
+    restart: unless-stopped
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    ports:
+      - "3004:3004"
+    env_file: .env
+    restart: unless-stopped
+    volumes:
+      - ./.auth:/app/.auth
