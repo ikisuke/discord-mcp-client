@@ -1,0 +1,36 @@
+{
+  "name": "discord-mcp-client",
+  "version": "1.0.0",
+  "description": "Discord Bot client utilizing the Model Context Protocol (MCP) TypeScript SDK for AI-powered interactions",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc -w & nodemon dist/index.js",
+    "lint": "eslint src/**/*.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "ai",
+    "mcp",
+    "model-context-protocol"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "@modelcontextprotocol/typescript-sdk": "^0.1.0",
+    "dotenv": "^16.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.5",
+    "typescript": "^5.3.3",
+    "nodemon": "^3.0.3",
+    "eslint": "^8.56.0",
+    "@typescript-eslint/eslint-plugin": "^6.19.1",
+    "@typescript-eslint/parser": "^6.19.1"
+  }
+}
