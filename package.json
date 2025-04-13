@@ -21,16 +21,18 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@modelcontextprotocol/sdk": "^1.9.0",
+    "@modelcontextprotocol/server-github": "^2025.4.8",
     "discord.js": "^14.14.1",
-    "@modelcontextprotocol/typescript-sdk": "^0.1.0",
     "dotenv": "^16.3.2"
   },
   "devDependencies": {
     "@types/node": "^20.11.5",
-    "typescript": "^5.3.3",
-    "nodemon": "^3.0.3",
-    "eslint": "^8.56.0",
     "@typescript-eslint/eslint-plugin": "^6.19.1",
-    "@typescript-eslint/parser": "^6.19.1"
+    "@typescript-eslint/parser": "^6.19.1",
+    "eslint": "^8.56.0",
+    "nodemon": "^3.0.3",
+    "typescript": "^5.3.3"
   }
 }
