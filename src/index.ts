@@ -1,4 +1,4 @@
-import { Client, Events, GatewayIntentBits, Message, Interaction, ChannelType, ThreadChannel } from 'discord.js';
+import { Client, Events, GatewayIntentBits, Message, Interaction, ChannelType, ThreadChannel, isJSONEncodable } from 'discord.js';
 import { config } from 'dotenv';
 import { setupMCPClient } from './mcp-client.js';
 import { registerCommands, handleCommandInteraction, handleServiceSelection } from './slash-commands.js';
@@ -7,6 +7,12 @@ import { defaultConfig } from './config.js';
 
 // 環境変数の読み込み
 config();
+
+// 必須環境変数のバリデーション
+if (!process.env.DISCORD_TOKEN) {
+  console.error('エラー: DISCORD_TOKEN 環境変数が設定されていません。');
+  process.exit(1);
+}
 
 // Discord クライアントの初期化
 const discordClient = new Client({
@@ -43,7 +49,7 @@ discordClient.on(Events.InteractionCreate, async (interaction: Interaction) => {
       return;
     }
   } catch (error) {
-    console.error('インタラクション処理エラー:', error);
+    console.error('エラー: インタラクション処理中に問題が発生しました', error);
     // エラーメッセージを返す（まだ応答していない場合のみ）
     if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
       await interaction.reply({
@@ -71,19 +77,35 @@ discordClient.on(Events.MessageCreate, async (message: Message) => {
   }
 });
 
+/**
+ * 処理中メッセージを安全に削除する
+ */
+async function safelyDeleteMessage(message: Message): Promise<void> {
+  try {
+    await message.delete();
+  } catch (error) {
+    console.error('エラー: メッセージの削除に失敗しました', error);
+    // 削除エラーは無視するが、ログには残す
+  }
+}
+
+/**
+ * スレッドチャンネルかどうか確認する型ガード
+ */
+function isThreadChannel(channel: Message['channel']): channel is ThreadChannel {
+  return channel.type === ChannelType.PublicThread || channel.type === ChannelType.PrivateThread;
+}
+
 // スレッド内のメッセージを処理
 async function handleThreadMessage(message: Message) {
   try {
-    // スレッドチャンネルかどうか確認
-    if (!(message.channel.type === ChannelType.PublicThread || message.channel.type === ChannelType.PrivateThread)) {
+    // スレッドチャンネルかどうか確認（型ガードを使用）
+    if (!isThreadChannel(message.channel)) {
       return;
     }
     
-    // ThreadChannelとして型キャスト
-    const threadChannel = message.channel as ThreadChannel;
-    
     // 親チャンネルのIDを取得
-    const parentId = threadChannel.parentId;
+    const parentId = message.channel.parentId;
     if (!parentId) return;
     
     // 親チャンネルが登録されているか確認
@@ -102,7 +124,8 @@ async function handleThreadMessage(message: Message) {
     
     try {
       // スレッド内の過去メッセージを取得（最大100件）
-      const messages = await threadChannel.messages.fetch({ limit: 100 });
+      // 注: 将来的にはページネーションを実装して、より多くのメッセージを取得することが望ましい
+      const messages = await message.channel.messages.fetch({ limit: 100 });
       // 時系列順にソート（古いものから新しいものへ）
       const sortedMessages = Array.from(messages.values()).sort((a, b) => a.createdTimestamp - b.createdTimestamp);
       
@@ -118,25 +141,30 @@ async function handleThreadMessage(message: Message) {
       if (response && response.length > 0) {
         const assistantMessages = response.filter(msg => msg.role === 'assistant');
         if (assistantMessages.length > 0) {
-          responseText = assistantMessages[assistantMessages.length - 1].content as string;
+          const lastMessage = assistantMessages[assistantMessages.length - 1].content;
+          if (typeof lastMessage === 'string') {
+            responseText = lastMessage;
+          } else if (isJSONEncodable(lastMessage)) {
+            responseText = JSON.stringify(lastMessage);
+          }
         }
       }
       
       // 処理中メッセージを削除
-      await processingMessage.delete().catch(() => {});
+      await safelyDeleteMessage(processingMessage);
       
       // 応答を返す
       await message.reply({
         content: responseText,
         allowedMentions: { repliedUser: true }
       });
-    } catch (e) {
+    } catch (error) {
       // 処理中メッセージを削除
-      await processingMessage.delete().catch(() => {});
-      throw e; // 外側のエラーハンドリングに渡す
+      await safelyDeleteMessage(processingMessage);
+      throw error; // 外側のエラーハンドリングに渡す
     }
   } catch (error) {
-    console.error('スレッドメッセージ処理エラー:', error);
+    console.error('エラー: スレッドメッセージ処理中に問題が発生しました', error);
     await message.reply('すみません、処理中にエラーが発生しました。');
   }
 }
@@ -145,7 +173,7 @@ async function handleThreadMessage(message: Message) {
 async function handleMentionMessage(message: Message) {
   try {
     // 入力テキストの準備（メンション部分を除去）
-    const content = message.content.replace(/<@!?\d+>/g, '').trim();
+    const content = message.content.replace(/<@!?\\d+>/g, '').trim();
     
     // 入力が空の場合は処理しない
     if (!content) return;
@@ -154,25 +182,33 @@ async function handleMentionMessage(message: Message) {
     const processingMessage = await message.reply('考え中...');
     
     try {
-      // メッセージを処理して応答する
-      // 注: MCPクライアントのAPI仕様が明確でないため、ここではシンプルな応答で代用
-      await new Promise(resolve => setTimeout(resolve, 1000)); // 処理を模倣
+      // MCPクライアントを使用してメッセージを処理
+      const response = await mcpProcessor.processSingleMessage({
+        role: 'user',
+        content,
+      }, defaultConfig);
+      
+      // 応答テキストを取得
+      let responseText = "応答を生成できませんでした。";
+      if (response && typeof response.content === 'string') {
+        responseText = response.content;
+      }
       
       // 処理中メッセージを削除
-      await processingMessage.delete().catch(() => {});
+      await safelyDeleteMessage(processingMessage);
       
       // 応答を送信
       await message.reply({
-        content: `あなたのメッセージを受け取りました: "${content}"\n現在このBotはスラッシュコマンド機能の開発中です。`,
+        content: responseText,
         allowedMentions: { repliedUser: true }
       });
-    } catch (e) {
+    } catch (error) {
       // 処理中メッセージを削除
-      await processingMessage.delete().catch(() => {});
-      throw e; // 外側のエラーハンドリングに渡す
+      await safelyDeleteMessage(processingMessage);
+      throw error; // 外側のエラーハンドリングに渡す
     }
   } catch (error) {
-    console.error('Error processing message:', error);
+    console.error('エラー: メンションメッセージ処理中に問題が発生しました', error);
     await message.reply('すみません、処理中にエラーが発生しました。');
   }
 }
@@ -180,7 +216,7 @@ async function handleMentionMessage(message: Message) {
 // Discord にログイン
 discordClient.login(process.env.DISCORD_TOKEN)
   .catch(error => {
-    console.error('Failed to login to Discord:', error);
+    console.error('エラー: Discord へのログインに失敗しました', error);
     process.exit(1);
   });
 
@@ -189,7 +225,7 @@ process.on('SIGINT', () => cleanup());
 process.on('SIGTERM', () => cleanup());
 
 async function cleanup() {
-  console.log('Shutting down...');
+  console.log('シャットダウン中...');
   // Discord クライアントを切断
   discordClient.destroy();
   // プロセスを終了
