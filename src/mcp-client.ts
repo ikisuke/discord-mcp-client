@@ -140,7 +140,7 @@ async function handleMessageContent(
 async function callAnthropic(
   conversationInput: string | Anthropic.MessageParam[], 
   serverConfig: MCPServersConfig, 
-  maxIterations = 10
+  maxIterations = 20
 ) {
   const anthropicClient = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
@@ -183,6 +183,7 @@ For more information about tasks, you can read the documentation in the docs/ di
   let currentToolUseBlock = toolUseBlock;
 
   let iterationCount = 0;
+  console.log("iterationCount", currentToolUseBlock);
   while (currentToolUseBlock && iterationCount < maxIterations) {
       iterationCount++;
       if (currentToolUseBlock) {
